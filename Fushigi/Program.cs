@@ -72,8 +72,6 @@ void DoFill()
                         currentCourse = new Course(courseLocation);
                         _courseSelected = true;
                     }
-
-                    ImGui.TreePop();
                 }
             }
             ImGui.TreePop();
