@@ -12,6 +12,7 @@ using System.Threading.Tasks;
 using Fushigi.param;
 using Fushigi.ui.widgets;
 using ImGuiNET;
+using System.Numerics;
 
 namespace Fushigi.ui
 {
@@ -113,6 +114,27 @@ namespace Fushigi.ui
                             mIsRomFSSelected = true;
                         }
                     }
+
+                    /* Saves the currently loaded course */
+
+                    var text_color = mSelectedCourseScene == null ?
+                         ImGui.GetStyle().Colors[(int)ImGuiCol.TextDisabled] :
+                         ImGui.GetStyle().Colors[(int)ImGuiCol.Text];
+
+                    ImGui.PushStyleColor(ImGuiCol.Text, ImGui.ColorConvertFloat4ToU32(text_color));
+
+                    if (ImGui.MenuItem("Save") && mSelectedCourseScene != null)
+                    {
+                        mSelectedCourseScene.Save();
+                    }
+                    if (ImGui.MenuItem("Save As") && mSelectedCourseScene != null)
+                    {
+                        FolderDialog dlg = new FolderDialog();
+                        if (dlg.ShowDialog())
+                            mSelectedCourseScene.Save(dlg.SelectedPath);
+                    }
+
+                    ImGui.PopStyleColor();
 
                     /* a ImGUI menu item that just closes the application */
                     if (ImGui.MenuItem("Close"))
