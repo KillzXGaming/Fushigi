@@ -245,7 +245,7 @@ namespace Fushigi.ui
                     DrawCourseList();
                 } 
 
-                mSelectedCourseScene?.DrawUI();
+                mSelectedCourseScene?.DrawUI(gl);
             }
             else
             {

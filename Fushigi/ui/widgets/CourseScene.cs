@@ -1,14 +1,18 @@
 ﻿using Fushigi.Byml;
+using Fushigi.Byml.Writer;
 using Fushigi.course;
 using Fushigi.param;
 using ImGuiNET;
 using Newtonsoft.Json.Linq;
 using Silk.NET.Input;
+using Silk.NET.OpenGL;
 using Silk.NET.SDL;
 using Silk.NET.Windowing;
 using System.Diagnostics;
 using System.Drawing;
+using System.Linq;
 using System.Numerics;
+using System.Reflection.Emit;
 using System.Text;
 using System.Xml.Linq;
 
@@ -28,25 +32,30 @@ namespace Fushigi.ui.widgets
 
         BymlHashTable? mSelectedActor = null;
 
+        readonly Dictionary<string, bool> mCategoryVisibility = [];
+
+        Dictionary<string, List<BymlHashTable>> ActorCategories = new Dictionary<string, List<BymlHashTable>>();
+
         public CourseScene(Course course)
         {
             this.course = course;
             selectedArea = course.GetArea(0);
             viewport = new LevelViewport(selectedArea);
+            ReloadArea();
         }
 
-        public void DrawUI()
+        public void DrawUI(GL gl)
         {
             bool status = ImGui.Begin("Course");
 
             CourseTabBar();
 
-            viewport.Draw(ImGui.GetContentRegionAvail(), mLayersVisibility, 
+            viewport.Draw(gl, ImGui.GetContentRegionAvail(), mLayersVisibility, 
                 selectedActors: new HashSet<BymlHashTable>()); //only temporary
 
             AreaParameterPanel();
 
-            ActorsPanel();
+            ActorsPanel(gl);
 
             ActorParameterPanel();
 
@@ -98,6 +107,7 @@ namespace Fushigi.ui.widgets
                         // Unselect actor
                         // This is so that users do not see an actor selected from another area
                         mSelectedActor = null;
+                        ReloadArea();
                     }
 
                     ImGui.EndTabItem();
@@ -107,6 +117,32 @@ namespace Fushigi.ui.widgets
             if (tabStatus)
             {
                 ImGui.EndTabBar();
+            }
+        }
+
+        private void ReloadArea()
+        {
+            if (ActorDB.Actors.Count == 0)
+                ActorDB.Init();
+
+            ActorCategories.Clear();
+
+            var root = selectedArea.GetRootNode();
+            // actors are in an array
+            BymlArrayNode actorArray = (BymlArrayNode)((BymlHashTable)root)["Actors"];
+
+            mCategoryVisibility.Clear();
+            foreach (BymlHashTable node in actorArray.Array.Cast<BymlHashTable>())
+            {
+                string actorName = ((BymlNode<string>)node["Gyaml"]).Data;
+                var actor = ActorDB.Actors[actorName];
+                if (!this.ActorCategories.ContainsKey(actor.Category))
+                {
+                    this.ActorCategories.Add(actor.Category, new List<BymlHashTable>());
+                    mCategoryVisibility.Add(actor.Category, true);
+                }
+
+                ActorCategories[actor.Category].Add(node);
             }
         }
 
@@ -136,9 +172,8 @@ namespace Fushigi.ui.widgets
             }
         }
 
-        private void ActorsPanel()
+        private void ActorsPanel(GL gl)
         {
-
             var root = selectedArea.GetRootNode();
 
             ImGui.Begin("Actors");
@@ -156,8 +191,18 @@ namespace Fushigi.ui.widgets
             // actors are in an array
             BymlArrayNode actorArray = (BymlArrayNode)((BymlHashTable)root)["Actors"];
 
-            //CourseActorsTreeView(actorArray);
-            CourseActorsLayerView(actorArray);
+            ImGui.BeginTabBar("actor_tab");
+
+            if (ImGui.BeginTabItem("Layers"))
+            {
+                CourseActorsLayerView(actorArray);
+                ImGui.EndTabItem();
+            }
+            if (ImGui.BeginTabItem("Tree"))
+            {
+                CourseActorsTreeView(actorArray, gl);
+                ImGui.EndTabItem();
+            }
 
             ImGui.End();
         }
@@ -254,6 +299,71 @@ namespace Fushigi.ui.widgets
                 mLayersVisibility[actorLayer] = true;
             }
             mHasFilledLayers = true;
+        }
+
+        private void CourseActorsTreeView(BymlArrayNode actorArray, GL gl)
+        {
+            foreach (var category in ActorCategories)
+            {
+                bool vis = mCategoryVisibility[category.Key];
+                if (ImGui.Checkbox($"##{category}chk", ref vis))
+                {
+                    mCategoryVisibility[category.Key] = vis;
+                }
+                ImGui.SameLine();
+
+                if (ImGui.TreeNode(category.Key))
+                {
+                    ImGui.Indent();
+
+                    foreach (BymlHashTable node in category.Value)
+                    {
+                        ulong actorHash = ((BymlBigDataNode<ulong>)node["Hash"]).Data;
+                        string actorName = ((BymlNode<string>)node["Gyaml"]).Data;
+                        string name = ((BymlNode<string>)node["Name"]).Data;
+
+                        var actorResDB = ActorDB.Actors[actorName];
+                        var iconID = actorResDB.GetIcon(gl);
+                        if (iconID == -1)
+                        {
+
+                        }
+                        /*   string actorName = ((BymlNode<string>)node["Gyaml"]).Data;
+                           if (ImGui.TreeNodeEx(actorName, ImGuiTreeNodeFlags.Leaf))
+                           {
+                               ImGui.TreePop();
+                           }*/
+
+                        bool isSelected = (node == mSelectedActor);
+
+                        ImGui.PushID(actorHash.ToString());
+                        ImGui.Columns(2);
+
+
+                        bool avis = true;
+                        if (ImGui.Checkbox($"##{actorHash}vis", ref avis))
+                        {
+                        }
+                        ImGui.SameLine();
+
+                        ImGui.Image(iconID, new Vector2(22, 22));
+                        ImGui.SameLine();
+
+                        if (ImGui.Selectable(actorName, isSelected, ImGuiSelectableFlags.SpanAllColumns))
+                        {
+                            mSelectedActor = node;
+                        }
+                        ImGui.NextColumn();
+                        ImGui.BeginDisabled();
+                        ImGui.Text(name);
+                        ImGui.EndDisabled();
+                        ImGui.Columns(1);
+                    }
+                    ImGui.Unindent();
+
+                    ImGui.TreePop();
+                }
+            }
         }
 
         private void CourseActorsLayerView(BymlArrayNode actorArray)

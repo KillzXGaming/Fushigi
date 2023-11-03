@@ -12,6 +12,7 @@ using System.Text;
 using System.Threading.Tasks;
 using System.Security.Cryptography;
 using Vector3 = System.Numerics.Vector3;
+using Silk.NET.OpenGL;
 
 namespace Fushigi.ui.widgets
 {
@@ -121,7 +122,7 @@ namespace Fushigi.ui.widgets
             }
         }
 
-        public void Draw(Vector2 size, IDictionary<string, bool> layersVisibility, ISet<BymlHashTable> selectedActors)
+        public void Draw(GL gl, Vector2 size, IDictionary<string, bool> layersVisibility, ISet<BymlHashTable> selectedActors)
         {
             //mSelectedActors = selectedActors;
             mLayersVisibility = layersVisibility;
@@ -159,7 +160,7 @@ namespace Fushigi.ui.widgets
 
             DrawGrid();
 
-            DrawAreaContent();
+            DrawAreaContent(gl);
 
             if (mEditorState == EditorState.Picking)
             {
@@ -377,7 +378,7 @@ namespace Fushigi.ui.widgets
 
         private static Vector2[] s_actorRectPolygon = new Vector2[4];
 
-        void DrawAreaContent()
+        void DrawAreaContent(GL gl)
         {
             const float pointSize = 3;
 
@@ -436,6 +437,7 @@ namespace Fushigi.ui.widgets
                 BymlArrayNode rotationArr = (BymlArrayNode)actor["Rotate"];
 
                 string layer = ((BymlNode<string>)actor["Layer"]).Data;
+                string actorName = ((BymlNode<string>)actor["Gyaml"]).Data;
 
                 if (mLayersVisibility!.TryGetValue(layer, out bool isVisible) && isVisible)
                 {
@@ -472,14 +474,31 @@ namespace Fushigi.ui.widgets
                         color = ImGui.ColorConvertFloat4ToU32(new(0.84f, .437f, .437f, 1));
                     }
 
-                    for (int i = 0; i < 4; i++)
+                    var actorResDB = ActorDB.Actors[actorName];
+
+                    if (actorResDB.Category == "Block" ||
+                        actorResDB.Category == "Item" ||
+                        actorResDB.Category == "Coin")
                     {
-                        mDrawList.AddCircleFilled(s_actorRectPolygon[i], 
-                            pointSize, color);
-                        mDrawList.AddLine(
-                            s_actorRectPolygon[i], 
-                            s_actorRectPolygon[(i + 1) % 4],
-                            color, isHovered ? 2.5f : 1.5f);
+                        var iconID = actorResDB.GetIcon(gl);
+                        if (iconID != -1)
+                        {
+                            mDrawList.AddImage(iconID,
+                           s_actorRectPolygon[3],
+                           s_actorRectPolygon[1], new Vector2(1, 1), new Vector2(0, 0));
+                        }
+                    }
+                    else
+                    {
+                        for (int i = 0; i < 4; i++)
+                        {
+                            mDrawList.AddCircleFilled(s_actorRectPolygon[i],
+                                pointSize, color);
+                            mDrawList.AddLine(
+                                s_actorRectPolygon[i],
+                                s_actorRectPolygon[(i + 1) % 4],
+                                color, isHovered ? 2.5f : 1.5f);
+                        }
                     }
 
                     string name = ((BymlNode<string>)actor["Gyaml"]).Data;
